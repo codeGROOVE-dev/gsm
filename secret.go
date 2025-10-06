@@ -1,8 +1,9 @@
 // Package gsm provides access to Google Cloud Secret Manager via REST API.
-package gsm //nolint:revive // package name intentionally shorter than directory
+package gsm
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +34,11 @@ const (
 	maxBodySize = 10 * 1024 * 1024 // 10MB limit for response bodies
 )
 
+// Note: This package intentionally uses simple retry logic without importing
+// external dependencies (including github.com/codeGROOVE-dev/retry) to maintain
+// zero dependencies. The metadata server and Secret Manager API are reliable
+// services that don't require exponential backoff with jitter.
+
 var (
 	projectIDRegex  = regexp.MustCompile(`^[a-z][a-z0-9-]{4,28}[a-z0-9]$`)
 	secretNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,255}$`)
@@ -58,7 +64,7 @@ func Secret(ctx context.Context, name string) (string, error) {
 			}
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, metadataURL+"/project/", http.NoBody)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, metadataURL+"/project/project-id", http.NoBody)
 		if err != nil {
 			return "", err
 		}
@@ -67,13 +73,14 @@ func Secret(ctx context.Context, name string) (string, error) {
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			lastErr = err
-			slog.Warn("failed to get project ID", "attempt", attempt+1)
+			slog.Warn("failed to get project ID", "attempt", attempt+1, "error", err)
 			continue
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close() //nolint:errcheck,gosec // best effort close
 			lastErr = fmt.Errorf("metadata server status %d", resp.StatusCode)
+			slog.Warn("failed to get project ID", "attempt", attempt+1, "status", resp.StatusCode)
 			continue
 		}
 
@@ -86,6 +93,7 @@ func Secret(ctx context.Context, name string) (string, error) {
 
 		pid = strings.TrimSpace(string(body))
 		if pid != "" {
+			slog.Info("fetched project ID from metadata server", "project_id", pid, "length", len(pid))
 			break
 		}
 		lastErr = errors.New("empty project ID")
@@ -101,7 +109,7 @@ func Secret(ctx context.Context, name string) (string, error) {
 // SecretInProject retrieves the latest version of a secret from a specific project.
 func SecretInProject(ctx context.Context, pid, name string) (string, error) {
 	if !projectIDRegex.MatchString(pid) {
-		return "", errors.New("invalid project ID format")
+		return "", fmt.Errorf("invalid project ID format: %q", pid)
 	}
 	if !secretNameRegex.MatchString(name) {
 		return "", errors.New("invalid secret name format")
@@ -129,13 +137,14 @@ func SecretInProject(ctx context.Context, pid, name string) (string, error) {
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			lastErr = err
-			slog.Warn("failed to get access token", "attempt", attempt+1)
+			slog.Warn("failed to get access token", "attempt", attempt+1, "error", err)
 			continue
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close() //nolint:errcheck,gosec // best effort close
 			lastErr = fmt.Errorf("metadata server status %d", resp.StatusCode)
+			slog.Warn("failed to get access token", "attempt", attempt+1, "status", resp.StatusCode)
 			continue
 		}
 
@@ -181,7 +190,7 @@ func SecretInProject(ctx context.Context, pid, name string) (string, error) {
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			lastErr = err
-			slog.Warn("failed to access secret", "attempt", attempt+1)
+			slog.Warn("failed to access secret", "attempt", attempt+1, "error", err)
 			continue
 		}
 
@@ -215,8 +224,15 @@ func SecretInProject(ctx context.Context, pid, name string) (string, error) {
 			continue
 		}
 
+		// The Secret Manager API returns base64-encoded data
+		decoded, err := base64.StdEncoding.DecodeString(result.Payload.Data)
+		if err != nil {
+			lastErr = fmt.Errorf("failed to decode secret data: %w", err)
+			continue
+		}
+
 		slog.Info("secret accessed successfully")
-		return result.Payload.Data, nil
+		return string(decoded), nil
 	}
 
 	return "", fmt.Errorf("failed to access secret: %w", lastErr)

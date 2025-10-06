@@ -1,6 +1,10 @@
 # BEGIN: lint-install .
 # http://github.com/codeGROOVE-dev/lint-install
 
+.PHONY: test
+test:
+	go test -v -race -timeout=60s ./...
+
 .PHONY: lint
 lint: _lint
 

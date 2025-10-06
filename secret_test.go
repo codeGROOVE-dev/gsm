@@ -2,6 +2,7 @@ package gsm
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -63,7 +64,7 @@ func TestSecret(t *testing.T) {
 					w.WriteHeader(http.StatusForbidden)
 					return
 				}
-				if strings.HasSuffix(r.URL.Path, "/project/") {
+				if strings.HasSuffix(r.URL.Path, "/project/project-id") {
 					if tt.metadataStatus != http.StatusOK {
 						w.WriteHeader(tt.metadataStatus)
 						return
@@ -95,8 +96,10 @@ func TestSecret(t *testing.T) {
 					return
 				}
 				w.WriteHeader(http.StatusOK)
+				// Secret Manager API returns base64-encoded data
+				encodedData := base64.StdEncoding.EncodeToString([]byte(tt.secretData))
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // test mock server
-					"payload": map[string]string{"data": tt.secretData},
+					"payload": map[string]string{"data": encodedData},
 				})
 			}))
 			defer apiServer.Close()
@@ -231,8 +234,10 @@ func TestSecretInProject(t *testing.T) {
 					return
 				}
 				w.WriteHeader(http.StatusOK)
+				// Secret Manager API returns base64-encoded data
+				encodedData := base64.StdEncoding.EncodeToString([]byte(tt.secretData))
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // test mock server
-					"payload": map[string]string{"data": tt.secretData},
+					"payload": map[string]string{"data": encodedData},
 				})
 			}))
 			defer apiServer.Close()
@@ -287,8 +292,10 @@ func TestGetProjectRetry(t *testing.T) {
 				return
 			}
 			w.WriteHeader(http.StatusOK)
+			// Secret Manager API returns base64-encoded data
+			encodedData := base64.StdEncoding.EncodeToString([]byte("secret-value"))
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // test mock server
-				"payload": map[string]string{"data": "secret-value"},
+				"payload": map[string]string{"data": encodedData},
 			})
 		}))
 		defer apiServer.Close()
@@ -527,7 +534,7 @@ func TestEmptyResponses(t *testing.T) {
 			name: "empty project ID response",
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					if strings.HasSuffix(r.URL.Path, "/project/") {
+					if strings.HasSuffix(r.URL.Path, "/project/project-id") {
 						w.WriteHeader(http.StatusOK)
 						_, _ = w.Write([]byte("   \n  ")) //nolint:errcheck // test mock server
 						return
@@ -594,8 +601,10 @@ func TestURLConstruction(t *testing.T) {
 		apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			capturedURL = r.URL.String()
 			w.WriteHeader(http.StatusOK)
+			// Secret Manager API returns base64-encoded data
+			encodedData := base64.StdEncoding.EncodeToString([]byte("secret-value"))
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // test mock server
-				"payload": map[string]string{"data": "secret-value"},
+				"payload": map[string]string{"data": encodedData},
 			})
 		}))
 		defer apiServer.Close()
