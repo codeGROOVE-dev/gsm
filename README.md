@@ -1,8 +1,8 @@
-# gcp-secret
+# gsm
 
 Zero-dependency Go client for Google Cloud Secret Manager.
 
-This library uses the Secret Manager REST API directly instead of the official SDK to avoid pulling in unnecessary dependencies. It's production-hardened with automatic retries, proper error handling, and context cancellation support.
+Why another Secret Manager client? The official Google SDK pulls in **90+ dependencies**. This library uses the Secret Manager REST API directly with **zero external dependencies** - just the Go standard library.
 
 ## Installation
 
@@ -10,51 +10,66 @@ This library uses the Secret Manager REST API directly instead of the official S
 go get github.com/codeGROOVE-dev/gsm
 ```
 
-## Usage
+## Quick Start
 
 ```go
-package main
+import "github.com/codeGROOVE-dev/gsm"
 
-import (
-    "context"
-    "log"
+// Fetch a secret (auto-detects project from metadata server)
+value, err := gsm.Fetch(ctx, "my-secret")
 
-    "github.com/codeGROOVE-dev/gsm"
-)
+// Store a secret (creates if missing, adds version if exists)
+err = gsm.Store(ctx, "my-secret", "secret-value")
 
-func main() {
-    ctx := context.Background()
-
-    // Auto-detect project from metadata server
-    value, err := gsm.Secret(ctx, "my-secret")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // Or specify project explicitly
-    value, err = gsm.SecretInProject(ctx, "my-project", "my-secret")
-    if err != nil {
-        log.Fatal(err)
-    }
-}
+// Or specify project explicitly
+value, err = gsm.FetchFromProject(ctx, "my-project", "my-secret")
+err = gsm.StoreInProject(ctx, "my-project", "my-secret", "secret-value")
 ```
 
 ## Features
 
-- Zero external dependencies (uses only Go standard library)
-- Automatic authentication via GCP metadata server
-- Retries on transient failures (3 attempts with 1s delay)
-- Context cancellation support
-- Response body size limiting (10MB)
-- Structured logging with log/slog
+- **Zero dependencies** - Uses only Go standard library (no protobuf, no gRPC, no bloat)
+- **Production-ready** - Automatic retries (3 attempts, 1s delay), context cancellation, 10MB response limits
+- **Auto-auth** - Authenticates via GCP metadata server (Cloud Run, GCE, GKE)
+- **Idempotent writes** - `Store()` creates secrets if missing, adds versions if they exist
+- **Structured logging** - Uses `log/slog` for observability
 
-## Requirements
+## Permissions
 
-Designed for Cloud Run and GCE environments where the metadata server is available. The service account needs the `roles/secretmanager.secretAccessor` role:
+### Reading Secrets
+
+Grant `roles/secretmanager.secretAccessor`:
 
 ```bash
 gcloud projects add-iam-policy-binding PROJECT_ID \
     --member="serviceAccount:SERVICE_ACCOUNT" \
     --role="roles/secretmanager.secretAccessor"
 ```
+
+### Writing Secrets
+
+Grant `roles/secretmanager.admin` for full control:
+
+```bash
+gcloud projects add-iam-policy-binding PROJECT_ID \
+    --member="serviceAccount:SERVICE_ACCOUNT" \
+    --role="roles/secretmanager.admin"
+```
+
+Or use `roles/secretmanager.secretVersionAdder` to only update existing secrets without create permissions.
+
+## Environment
+
+Designed for GCP environments with metadata server access:
+- Cloud Run
+- Google Compute Engine (GCE)
+- Google Kubernetes Engine (GKE)
+
+## Why This Exists
+
+Most projects don't need 90+ dependencies just to read a secret. The official SDK is great if you're using lots of GCP services, but if you just need Secret Manager, this gives you the same functionality with zero deps and a much smaller binary.
+
+## License
+
+MIT
 

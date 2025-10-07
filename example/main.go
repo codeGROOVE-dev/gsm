@@ -13,19 +13,32 @@ import (
 func main() {
 	ctx := context.Background()
 
-	// Get secret from current project (auto-detected)
-	value, err := gsm.Secret(ctx, "my-secret")
+	// Store a secret (auto-detect project)
+	if err := gsm.Store(ctx, "my-secret", "my-secret-value"); err != nil {
+		log.Fatalf("failed to store secret: %v", err)
+	}
+	slog.Info("secret stored successfully")
+
+	// Fetch secret from current project (auto-detected)
+	value, err := gsm.Fetch(ctx, "my-secret")
 	if err != nil {
-		log.Fatalf("failed to get secret: %v", err)
+		log.Fatalf("failed to fetch secret: %v", err)
 	}
 
 	slog.Info("secret retrieved", "length", len(value))
 
 	// Or specify a different project explicitly
 	if otherProject := os.Getenv("OTHER_PROJECT_ID"); otherProject != "" {
-		value, err = gsm.SecretInProject(ctx, otherProject, "my-secret")
+		// Store in specific project
+		if err := gsm.StoreInProject(ctx, otherProject, "my-secret", "other-value"); err != nil {
+			log.Fatalf("failed to store secret in other project: %v", err)
+		}
+		slog.Info("secret stored in other project")
+
+		// Fetch from specific project
+		value, err = gsm.FetchFromProject(ctx, otherProject, "my-secret")
 		if err != nil {
-			log.Fatalf("failed to get secret: %v", err)
+			log.Fatalf("failed to fetch secret: %v", err)
 		}
 		slog.Info("secret from other project retrieved", "length", len(value))
 	}

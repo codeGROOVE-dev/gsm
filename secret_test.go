@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func TestSecret(t *testing.T) {
+func TestFetch(t *testing.T) {
 	oldRetryDelay := retryDelay
 	retryDelay = 10 * time.Millisecond
 	defer func() { retryDelay = oldRetryDelay }()
@@ -115,32 +115,32 @@ func TestSecret(t *testing.T) {
 			apiURL = apiServer.URL
 
 			ctx := context.Background()
-			got, err := Secret(ctx, tt.secretName)
+			got, err := Fetch(ctx, tt.secretName)
 
 			if tt.wantErr {
 				if err == nil {
-					t.Errorf("Secret() error = nil, wantErr %v", tt.wantErr)
+					t.Errorf("Fetch() error = nil, wantErr %v", tt.wantErr)
 					return
 				}
 				if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
-					t.Errorf("Secret() error = %v, want error containing %v", err, tt.errContains)
+					t.Errorf("Fetch() error = %v, want error containing %v", err, tt.errContains)
 				}
 				return
 			}
 
 			if err != nil {
-				t.Errorf("Secret() unexpected error = %v", err)
+				t.Errorf("Fetch() unexpected error = %v", err)
 				return
 			}
 
 			if got != tt.secretData {
-				t.Errorf("Secret() = %v, want %v", got, tt.secretData)
+				t.Errorf("Fetch() = %v, want %v", got, tt.secretData)
 			}
 		})
 	}
 }
 
-func TestSecretInProject(t *testing.T) {
+func TestFetchFromProject(t *testing.T) {
 	oldRetryDelay := retryDelay
 	retryDelay = 10 * time.Millisecond
 	defer func() { retryDelay = oldRetryDelay }()
@@ -253,26 +253,26 @@ func TestSecretInProject(t *testing.T) {
 			apiURL = apiServer.URL
 
 			ctx := context.Background()
-			got, err := SecretInProject(ctx, tt.projectID, tt.secretName)
+			got, err := FetchFromProject(ctx, tt.projectID, tt.secretName)
 
 			if tt.wantErr {
 				if err == nil {
-					t.Errorf("SecretInProject() error = nil, wantErr %v", tt.wantErr)
+					t.Errorf("FetchFromProject() error = nil, wantErr %v", tt.wantErr)
 					return
 				}
 				if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
-					t.Errorf("SecretInProject() error = %v, want error containing %v", err, tt.errContains)
+					t.Errorf("FetchFromProject() error = %v, want error containing %v", err, tt.errContains)
 				}
 				return
 			}
 
 			if err != nil {
-				t.Errorf("SecretInProject() unexpected error = %v", err)
+				t.Errorf("FetchFromProject() unexpected error = %v", err)
 				return
 			}
 
 			if got != tt.secretData {
-				t.Errorf("SecretInProject() = %v, want %v", got, tt.secretData)
+				t.Errorf("FetchFromProject() = %v, want %v", got, tt.secretData)
 			}
 		})
 	}
@@ -316,12 +316,12 @@ func TestGetProjectRetry(t *testing.T) {
 		apiURL = apiServer.URL
 
 		ctx := context.Background()
-		got, err := SecretInProject(ctx, "test-project", "test-secret")
+		got, err := FetchFromProject(ctx, "test-project", "test-secret")
 		if err != nil {
-			t.Errorf("SecretInProject() unexpected error = %v", err)
+			t.Errorf("FetchFromProject() unexpected error = %v", err)
 		}
 		if got != "secret-value" {
-			t.Errorf("SecretInProject() = %v, want %v", got, "secret-value")
+			t.Errorf("FetchFromProject() = %v, want %v", got, "secret-value")
 		}
 		if attempts != 3 {
 			t.Errorf("Expected 3 attempts, got %d", attempts)
@@ -352,9 +352,9 @@ func TestGetProjectRetry(t *testing.T) {
 		apiURL = apiServer.URL
 
 		ctx := context.Background()
-		_, err := SecretInProject(ctx, "test-project", "test-secret")
+		_, err := FetchFromProject(ctx, "test-project", "test-secret")
 		if err == nil {
-			t.Error("SecretInProject() expected error, got nil")
+			t.Error("FetchFromProject() expected error, got nil")
 		}
 		if attempts != 1 {
 			t.Errorf("Expected 1 attempt for 4xx error, got %d", attempts)
@@ -385,9 +385,9 @@ func TestGetProjectRetry(t *testing.T) {
 		apiURL = apiServer.URL
 
 		ctx := context.Background()
-		_, err := SecretInProject(ctx, "test-project", "test-secret")
+		_, err := FetchFromProject(ctx, "test-project", "test-secret")
 		if err == nil {
-			t.Error("SecretInProject() expected error, got nil")
+			t.Error("FetchFromProject() expected error, got nil")
 		}
 		if !strings.Contains(err.Error(), "failed to access secret") {
 			t.Errorf("Expected error about failed access, got: %v", err)
@@ -429,12 +429,12 @@ func TestContextCancellation(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 
-		_, err := SecretInProject(ctx, "test-project", "test-secret")
+		_, err := FetchFromProject(ctx, "test-project", "test-secret")
 		if err == nil {
-			t.Error("SecretInProject() expected error, got nil")
+			t.Error("FetchFromProject() expected error, got nil")
 		}
 		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Errorf("SecretInProject() error = %v, want %v", err, context.DeadlineExceeded)
+			t.Errorf("FetchFromProject() error = %v, want %v", err, context.DeadlineExceeded)
 		}
 		if attempts > 2 {
 			t.Errorf("Expected at most 2 attempts before context cancellation, got %d", attempts)
@@ -474,10 +474,10 @@ func TestLargeResponseBody(t *testing.T) {
 		apiURL = apiServer.URL
 
 		ctx := context.Background()
-		_, err := SecretInProject(ctx, "test-project", "test-secret")
+		_, err := FetchFromProject(ctx, "test-project", "test-secret")
 		// Should fail to decode because response was truncated
 		if err == nil {
-			t.Error("SecretInProject() expected error for truncated response, got nil")
+			t.Error("FetchFromProject() expected error for truncated response, got nil")
 		}
 	})
 }
@@ -571,9 +571,9 @@ func TestEmptyResponses(t *testing.T) {
 			ctx := context.Background()
 			var err error
 			if strings.Contains(tt.name, "project") {
-				_, err = Secret(ctx, "test-secret")
+				_, err = Fetch(ctx, "test-secret")
 			} else {
-				_, err = SecretInProject(ctx, "test-project", "test-secret")
+				_, err = FetchFromProject(ctx, "test-project", "test-secret")
 			}
 
 			if !tt.wantErr {
@@ -625,7 +625,7 @@ func TestURLConstruction(t *testing.T) {
 		apiURL = apiServer.URL
 
 		ctx := context.Background()
-		_, err := SecretInProject(ctx, "my-project", "my-secret")
+		_, err := FetchFromProject(ctx, "my-project", "my-secret")
 		if err != nil {
 			t.Errorf("unexpected error = %v", err)
 		}
@@ -633,6 +633,399 @@ func TestURLConstruction(t *testing.T) {
 		expectedPath := "/projects/my-project/secrets/my-secret/versions/latest:access"
 		if capturedURL != expectedPath {
 			t.Errorf("URL = %v, want %v", capturedURL, expectedPath)
+		}
+	})
+}
+
+func TestStore(t *testing.T) { //nolint:gocognit // table-driven test
+	oldRetryDelay := retryDelay
+	retryDelay = 10 * time.Millisecond
+	defer func() { retryDelay = oldRetryDelay }()
+
+	tests := []struct {
+		name           string
+		secretName     string
+		secretValue    string
+		projectID      string
+		metadataStatus int
+		tokenStatus    int
+		createStatus   int
+		addStatus      int
+		wantErr        bool
+		errContains    string
+	}{
+		{
+			name:           "successful store new secret",
+			secretName:     "test-secret",
+			secretValue:    "secret-value",
+			projectID:      "test-project",
+			metadataStatus: http.StatusOK,
+			tokenStatus:    http.StatusOK,
+			createStatus:   http.StatusOK,
+			addStatus:      http.StatusOK,
+			wantErr:        false,
+		},
+		{
+			name:           "successful store existing secret",
+			secretName:     "existing-secret",
+			secretValue:    "new-value",
+			projectID:      "test-project",
+			metadataStatus: http.StatusOK,
+			tokenStatus:    http.StatusOK,
+			createStatus:   http.StatusConflict,
+			addStatus:      http.StatusOK,
+			wantErr:        false,
+		},
+		{
+			name:           "metadata server fails",
+			secretName:     "test-secret",
+			secretValue:    "value",
+			projectID:      "",
+			metadataStatus: http.StatusInternalServerError,
+			wantErr:        true,
+			errContains:    "failed to get project ID",
+		},
+		{
+			name:           "empty secret name",
+			secretName:     "",
+			secretValue:    "value",
+			projectID:      "test-project",
+			metadataStatus: http.StatusOK,
+			tokenStatus:    http.StatusOK,
+			wantErr:        true,
+			errContains:    "invalid secret name format",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup fake metadata server
+			metadataServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Metadata-Flavor") != "Google" {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+				if strings.HasSuffix(r.URL.Path, "/project/project-id") {
+					if tt.metadataStatus != http.StatusOK {
+						w.WriteHeader(tt.metadataStatus)
+						return
+					}
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(tt.projectID)) //nolint:errcheck // test mock server
+					return
+				}
+				if strings.Contains(r.URL.Path, "/token") {
+					if tt.tokenStatus != http.StatusOK {
+						w.WriteHeader(tt.tokenStatus)
+						return
+					}
+					w.WriteHeader(http.StatusOK)
+					_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "test-token"}) //nolint:errcheck // test mock server
+					return
+				}
+			}))
+			defer metadataServer.Close()
+
+			// Setup fake secret manager API
+			apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Authorization") != "Bearer test-token" {
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				if strings.Contains(r.URL.Path, "/secrets") && r.URL.Query().Get("secretId") != "" {
+					w.WriteHeader(tt.createStatus)
+					if tt.createStatus == http.StatusOK || tt.createStatus == http.StatusCreated {
+						_ = json.NewEncoder(w).Encode(map[string]string{"name": "projects/" + tt.projectID + "/secrets/" + tt.secretName}) //nolint:errcheck // test mock server
+					} else {
+						_, _ = w.Write([]byte("error message")) //nolint:errcheck // test mock server
+					}
+					return
+				}
+				if strings.Contains(r.URL.Path, ":addVersion") {
+					w.WriteHeader(tt.addStatus)
+					if tt.addStatus == http.StatusOK {
+						_ = json.NewEncoder(w).Encode(map[string]string{"name": "projects/" + tt.projectID + "/secrets/" + tt.secretName + "/versions/1"}) //nolint:errcheck // test mock server
+					} else {
+						_, _ = w.Write([]byte("error message")) //nolint:errcheck // test mock server
+					}
+					return
+				}
+			}))
+			defer apiServer.Close()
+
+			// Override URLs
+			oldMetadataURL := metadataURL
+			oldAPIURL := apiURL
+			defer func() {
+				metadataURL = oldMetadataURL
+				apiURL = oldAPIURL
+			}()
+			metadataURL = metadataServer.URL
+			apiURL = apiServer.URL
+
+			ctx := context.Background()
+			err := Store(ctx, tt.secretName, tt.secretValue)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Store() error = nil, wantErr %v", tt.wantErr)
+					return
+				}
+				if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("Store() error = %v, want error containing %v", err, tt.errContains)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Store() unexpected error = %v", err)
+			}
+		})
+	}
+}
+
+func TestStoreInProject(t *testing.T) {
+	oldRetryDelay := retryDelay
+	retryDelay = 10 * time.Millisecond
+	defer func() { retryDelay = oldRetryDelay }()
+
+	tests := []struct {
+		name         string
+		projectID    string
+		secretName   string
+		secretValue  string
+		tokenStatus  int
+		createStatus int
+		addStatus    int
+		wantErr      bool
+		errContains  string
+	}{
+		{
+			name:         "successful store new secret",
+			projectID:    "test-project",
+			secretName:   "test-secret",
+			secretValue:  "secret-value",
+			tokenStatus:  http.StatusOK,
+			createStatus: http.StatusCreated,
+			addStatus:    http.StatusOK,
+			wantErr:      false,
+		},
+		{
+			name:         "successful store existing secret",
+			projectID:    "test-project",
+			secretName:   "existing-secret",
+			secretValue:  "new-value",
+			tokenStatus:  http.StatusOK,
+			createStatus: http.StatusConflict,
+			addStatus:    http.StatusOK,
+			wantErr:      false,
+		},
+		{
+			name:        "empty project ID",
+			projectID:   "",
+			secretName:  "test-secret",
+			secretValue: "value",
+			wantErr:     true,
+			errContains: "invalid project ID format",
+		},
+		{
+			name:        "empty secret name",
+			projectID:   "test-project",
+			secretName:  "",
+			secretValue: "value",
+			wantErr:     true,
+			errContains: "invalid secret name format",
+		},
+		{
+			name:        "token fetch fails",
+			projectID:   "test-project",
+			secretName:  "test-secret",
+			secretValue: "value",
+			tokenStatus: http.StatusInternalServerError,
+			wantErr:     true,
+			errContains: "failed to get access token",
+		},
+		{
+			name:         "secret creation permission denied",
+			projectID:    "test-project",
+			secretName:   "test-secret",
+			secretValue:  "value",
+			tokenStatus:  http.StatusOK,
+			createStatus: http.StatusForbidden,
+			addStatus:    http.StatusOK,
+			wantErr:      true,
+			errContains:  "status 403",
+		},
+		{
+			name:         "add version fails",
+			projectID:    "test-project",
+			secretName:   "existing-secret",
+			secretValue:  "value",
+			tokenStatus:  http.StatusOK,
+			createStatus: http.StatusConflict,
+			addStatus:    http.StatusForbidden,
+			wantErr:      true,
+			errContains:  "status 403",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup fake metadata server for token
+			metadataServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Metadata-Flavor") != "Google" {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+				if tt.tokenStatus != http.StatusOK {
+					w.WriteHeader(tt.tokenStatus)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "test-token"}) //nolint:errcheck // test mock server
+			}))
+			defer metadataServer.Close()
+
+			// Setup fake secret manager API
+			apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Authorization") != "Bearer test-token" {
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				if strings.Contains(r.URL.Path, "/secrets") && r.URL.Query().Get("secretId") != "" {
+					w.WriteHeader(tt.createStatus)
+					if tt.createStatus == http.StatusOK || tt.createStatus == http.StatusCreated {
+						_ = json.NewEncoder(w).Encode(map[string]string{"name": "projects/" + tt.projectID + "/secrets/" + tt.secretName}) //nolint:errcheck // test mock server
+					} else {
+						_, _ = w.Write([]byte("error message")) //nolint:errcheck // test mock server
+					}
+					return
+				}
+				if strings.Contains(r.URL.Path, ":addVersion") {
+					w.WriteHeader(tt.addStatus)
+					if tt.addStatus == http.StatusOK {
+						_ = json.NewEncoder(w).Encode(map[string]string{"name": "projects/" + tt.projectID + "/secrets/" + tt.secretName + "/versions/1"}) //nolint:errcheck // test mock server
+					} else {
+						_, _ = w.Write([]byte("error message")) //nolint:errcheck // test mock server
+					}
+					return
+				}
+			}))
+			defer apiServer.Close()
+
+			// Override URLs
+			oldMetadataURL := metadataURL
+			oldAPIURL := apiURL
+			defer func() {
+				metadataURL = oldMetadataURL
+				apiURL = oldAPIURL
+			}()
+			metadataURL = metadataServer.URL
+			apiURL = apiServer.URL
+
+			ctx := context.Background()
+			err := StoreInProject(ctx, tt.projectID, tt.secretName, tt.secretValue)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("StoreInProject() error = nil, wantErr %v", tt.wantErr)
+					return
+				}
+				if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("StoreInProject() error = %v, want error containing %v", err, tt.errContains)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("StoreInProject() unexpected error = %v", err)
+			}
+		})
+	}
+}
+
+func TestStoreRetry(t *testing.T) {
+	oldRetryDelay := retryDelay
+	retryDelay = 10 * time.Millisecond
+	defer func() { retryDelay = oldRetryDelay }()
+
+	t.Run("retry on 5xx errors during add version", func(t *testing.T) {
+		attempts := 0
+		apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "/secrets") && r.URL.Query().Get("secretId") != "" {
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
+			if strings.Contains(r.URL.Path, ":addVersion") {
+				attempts++
+				if attempts < 3 {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(map[string]string{"name": "projects/test-project/secrets/test-secret/versions/1"}) //nolint:errcheck // test mock server
+			}
+		}))
+		defer apiServer.Close()
+
+		metadataServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "test-token"}) //nolint:errcheck // test mock server
+		}))
+		defer metadataServer.Close()
+
+		oldMetadataURL := metadataURL
+		oldAPIURL := apiURL
+		defer func() {
+			metadataURL = oldMetadataURL
+			apiURL = oldAPIURL
+		}()
+		metadataURL = metadataServer.URL
+		apiURL = apiServer.URL
+
+		ctx := context.Background()
+		err := StoreInProject(ctx, "test-project", "test-secret", "test-value")
+		if err != nil {
+			t.Errorf("StoreInProject() unexpected error = %v", err)
+		}
+		if attempts != 3 {
+			t.Errorf("Expected 3 attempts, got %d", attempts)
+		}
+	})
+
+	t.Run("exhausts all retries on create", func(t *testing.T) {
+		attempts := 0
+		apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}))
+		defer apiServer.Close()
+
+		metadataServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "test-token"}) //nolint:errcheck // test mock server
+		}))
+		defer metadataServer.Close()
+
+		oldMetadataURL := metadataURL
+		oldAPIURL := apiURL
+		defer func() {
+			metadataURL = oldMetadataURL
+			apiURL = oldAPIURL
+		}()
+		metadataURL = metadataServer.URL
+		apiURL = apiServer.URL
+
+		ctx := context.Background()
+		err := StoreInProject(ctx, "test-project", "test-secret", "test-value")
+		if err == nil {
+			t.Error("StoreInProject() expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to create secret") {
+			t.Errorf("Expected error about failed create, got: %v", err)
+		}
+		if attempts != maxRetries {
+			t.Errorf("Expected %d attempts, got %d", maxRetries, attempts)
 		}
 	})
 }
@@ -651,7 +1044,7 @@ func TestNetworkErrors(t *testing.T) {
 		metadataURL = "http://localhost:1"
 
 		ctx := context.Background()
-		_, err := Secret(ctx, "test-secret")
+		_, err := Fetch(ctx, "test-secret")
 		if err == nil {
 			t.Error("Expected error from network failure, got nil")
 		}
@@ -666,7 +1059,7 @@ func TestNetworkErrors(t *testing.T) {
 		metadataURL = "http://localhost:1"
 
 		ctx := context.Background()
-		_, err := SecretInProject(ctx, "test-project", "test-secret")
+		_, err := FetchFromProject(ctx, "test-project", "test-secret")
 		if err == nil {
 			t.Error("Expected error from network failure, got nil")
 		}
@@ -690,7 +1083,7 @@ func TestNetworkErrors(t *testing.T) {
 		apiURL = "http://localhost:1"
 
 		ctx := context.Background()
-		_, err := SecretInProject(ctx, "test-project", "test-secret")
+		_, err := FetchFromProject(ctx, "test-project", "test-secret")
 		if err == nil {
 			t.Error("Expected error from network failure, got nil")
 		}
@@ -720,7 +1113,7 @@ func TestReadErrors(t *testing.T) {
 		metadataURL = metadataServer.URL
 
 		ctx := context.Background()
-		_, err := Secret(ctx, "test-secret")
+		_, err := Fetch(ctx, "test-secret")
 		if err == nil {
 			t.Error("Expected error from read failure, got nil")
 		}
@@ -752,7 +1145,7 @@ func TestReadErrors(t *testing.T) {
 		apiURL = apiServer.URL
 
 		ctx := context.Background()
-		_, err := SecretInProject(ctx, "test-project", "test-secret")
+		_, err := FetchFromProject(ctx, "test-project", "test-secret")
 		if err == nil {
 			t.Error("Expected error from read failures, got nil")
 		}
