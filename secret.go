@@ -2,6 +2,7 @@
 package gsm
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -51,17 +52,17 @@ func Fetch(ctx context.Context, name string) (string, error) {
 		return "", errors.New("invalid secret name format")
 	}
 
-	pid, err := getProjectID(ctx)
+	p, err := getProjectID(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	return FetchFromProject(ctx, pid, name)
+	return FetchFromProject(ctx, p, name)
 }
 
 // getProjectID fetches the project ID from the GCP metadata server.
 func getProjectID(ctx context.Context) (string, error) {
-	var pid string
+	var p string
 	var lastErr error
 
 	for attempt := range maxRetries {
@@ -101,24 +102,24 @@ func getProjectID(ctx context.Context) (string, error) {
 			continue
 		}
 
-		pid = strings.TrimSpace(string(body))
-		if pid != "" {
-			slog.Info("fetched project ID from metadata server", "project_id", pid, "length", len(pid))
+		p = strings.TrimSpace(string(body))
+		if p != "" {
+			slog.Info("fetched project ID from metadata server", "project_id", p, "length", len(p))
 			break
 		}
 		lastErr = errors.New("empty project ID")
 	}
 
-	if pid == "" {
+	if p == "" {
 		return "", fmt.Errorf("failed to get project ID: %w", lastErr)
 	}
 
-	return pid, nil
+	return p, nil
 }
 
 // getAccessToken fetches an access token from the GCP metadata server.
 func getAccessToken(ctx context.Context) (string, error) {
-	var tok string
+	var t string
 	var lastErr error
 
 	for attempt := range maxRetries {
@@ -162,17 +163,17 @@ func getAccessToken(ctx context.Context) (string, error) {
 		}
 
 		if result.AccessToken != "" {
-			tok = result.AccessToken
+			t = result.AccessToken
 			break
 		}
 		lastErr = errors.New("empty access token")
 	}
 
-	if tok == "" {
+	if t == "" {
 		return "", fmt.Errorf("failed to get access token: %w", lastErr)
 	}
 
-	return tok, nil
+	return t, nil
 }
 
 // FetchFromProject retrieves the latest version of a secret from a specific project.
@@ -184,7 +185,7 @@ func FetchFromProject(ctx context.Context, pid, name string) (string, error) {
 		return "", errors.New("invalid secret name format")
 	}
 
-	tok, err := getAccessToken(ctx)
+	t, err := getAccessToken(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -206,7 +207,7 @@ func FetchFromProject(ctx context.Context, pid, name string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		req.Header.Set("Authorization", "Bearer "+tok)
+		req.Header.Set("Authorization", "Bearer "+t)
 
 		resp, err := httpClient.Do(req)
 		if err != nil {
@@ -267,12 +268,12 @@ func Store(ctx context.Context, name, value string) error {
 		return errors.New("invalid secret name format")
 	}
 
-	pid, err := getProjectID(ctx)
+	p, err := getProjectID(ctx)
 	if err != nil {
 		return err
 	}
 
-	return StoreInProject(ctx, pid, name, value)
+	return StoreInProject(ctx, p, name, value)
 }
 
 // StoreInProject creates or updates a secret in a specific project.
@@ -290,11 +291,11 @@ func StoreInProject(ctx context.Context, pid, name, value string) error {
 		return err
 	}
 
-	// First, try to create the secret (inlined from createSecret)
+	// First, try to create the secret
 	createURL := fmt.Sprintf("%s/projects/%s/secrets?secretId=%s", apiURL, pid, name)
 	createReqBody := map[string]any{
-		"replication": map[string]string{
-			"automatic": "{}",
+		"replication": map[string]any{
+			"automatic": map[string]any{},
 		},
 	}
 	createData, err := json.Marshal(createReqBody)
@@ -313,7 +314,7 @@ func StoreInProject(ctx context.Context, pid, name, value string) error {
 			}
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, createURL, strings.NewReader(string(createData)))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, createURL, bytes.NewReader(createData))
 		if err != nil {
 			return err
 		}
@@ -357,7 +358,7 @@ func StoreInProject(ctx context.Context, pid, name, value string) error {
 		return fmt.Errorf("failed to create secret: %w", createErr)
 	}
 
-	// Now add a new version with the value (inlined from addSecretVersion)
+	// Now add a new version with the value
 	versionURL := fmt.Sprintf("%s/projects/%s/secrets/%s:addVersion", apiURL, pid, name)
 	encoded := base64.StdEncoding.EncodeToString([]byte(value))
 	versionReqBody := map[string]any{
@@ -381,7 +382,7 @@ func StoreInProject(ctx context.Context, pid, name, value string) error {
 			}
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, versionURL, strings.NewReader(string(versionData)))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, versionURL, bytes.NewReader(versionData))
 		if err != nil {
 			return err
 		}

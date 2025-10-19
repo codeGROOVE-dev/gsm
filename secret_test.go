@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -1086,6 +1087,64 @@ func TestNetworkErrors(t *testing.T) {
 		_, err := FetchFromProject(ctx, "test-project", "test-secret")
 		if err == nil {
 			t.Error("Expected error from network failure, got nil")
+		}
+	})
+}
+
+func TestReplicationPolicy(t *testing.T) {
+	oldRetryDelay := retryDelay
+	retryDelay = 10 * time.Millisecond
+	defer func() { retryDelay = oldRetryDelay }()
+
+	t.Run("correct JSON structure for automatic replication", func(t *testing.T) {
+		var capturedJSON string
+
+		apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "/secrets") && r.URL.Query().Get("secretId") != "" {
+				// Capture the raw request body as JSON string
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Errorf("Failed to read request body: %v", err)
+				}
+				capturedJSON = string(body)
+
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]string{"name": "projects/test-project/secrets/test-secret"}) //nolint:errcheck // test mock server
+				return
+			}
+			if strings.Contains(r.URL.Path, ":addVersion") {
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(map[string]string{"name": "projects/test-project/secrets/test-secret/versions/1"}) //nolint:errcheck // test mock server
+				return
+			}
+		}))
+		defer apiServer.Close()
+
+		metadataServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "test-token"}) //nolint:errcheck // test mock server
+		}))
+		defer metadataServer.Close()
+
+		oldMetadataURL := metadataURL
+		oldAPIURL := apiURL
+		defer func() {
+			metadataURL = oldMetadataURL
+			apiURL = oldAPIURL
+		}()
+		metadataURL = metadataServer.URL
+		apiURL = apiServer.URL
+
+		ctx := context.Background()
+		err := StoreInProject(ctx, "test-project", "test-secret", "test-value")
+		if err != nil {
+			t.Errorf("StoreInProject() unexpected error = %v", err)
+		}
+
+		// Verify the JSON matches exactly what the API expects
+		expectedJSON := `{"replication":{"automatic":{}}}`
+		if capturedJSON != expectedJSON {
+			t.Errorf("JSON mismatch:\nExpected: %s\nActual:   %s", expectedJSON, capturedJSON)
 		}
 	})
 }

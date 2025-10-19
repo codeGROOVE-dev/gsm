@@ -1,9 +1,6 @@
+
 # BEGIN: lint-install .
 # http://github.com/codeGROOVE-dev/lint-install
-
-.PHONY: test
-test:
-	go test -v -race -timeout=60s ./...
 
 .PHONY: lint
 lint: _lint
@@ -40,10 +37,33 @@ FIXERS += golangci-lint-fix
 golangci-lint-fix: $(GOLANGCI_LINT_BIN)
 	find . -name go.mod -execdir "$(GOLANGCI_LINT_BIN)" run -c "$(GOLANGCI_LINT_CONFIG)" --fix \;
 
+YAMLLINT_VERSION ?= 1.37.1
+YAMLLINT_ROOT := $(LINT_ROOT)/out/linters/yamllint-$(YAMLLINT_VERSION)
+YAMLLINT_BIN := $(YAMLLINT_ROOT)/dist/bin/yamllint
+$(YAMLLINT_BIN):
+	mkdir -p $(LINT_ROOT)/out/linters
+	rm -rf $(LINT_ROOT)/out/linters/yamllint-*
+	curl -sSfL https://github.com/adrienverge/yamllint/archive/refs/tags/v$(YAMLLINT_VERSION).tar.gz | tar -C $(LINT_ROOT)/out/linters -zxf -
+	cd $(YAMLLINT_ROOT) && pip3 install --target dist . || pip install --target dist .
+
+LINTERS += yamllint-lint
+yamllint-lint: $(YAMLLINT_BIN)
+	PYTHONPATH=$(YAMLLINT_ROOT)/dist $(YAMLLINT_ROOT)/dist/bin/yamllint .
+
 .PHONY: _lint $(LINTERS)
-_lint: $(LINTERS)
+_lint:
+	@exit_code=0; \
+	for target in $(LINTERS); do \
+		$(MAKE) $$target || exit_code=1; \
+	done; \
+	exit $$exit_code
 
 .PHONY: fix $(FIXERS)
-fix: $(FIXERS)
+fix:
+	@exit_code=0; \
+	for target in $(FIXERS); do \
+		$(MAKE) $$target || exit_code=1; \
+	done; \
+	exit $$exit_code
 
 # END: lint-install .
