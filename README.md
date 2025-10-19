@@ -48,15 +48,44 @@ gcloud projects add-iam-policy-binding PROJECT_ID \
 
 ### Writing Secrets
 
-Grant `roles/secretmanager.admin` for full control:
+For principle of least privilege, grant these specific permissions:
+
+1. **Create a custom role** for secret creation:
+
+```bash
+gcloud iam roles create secretCreator --project=PROJECT_ID \
+    --title="Secret Creator" \
+    --description="Can create new secrets" \
+    --permissions=secretmanager.secrets.create
+
+gcloud projects add-iam-policy-binding PROJECT_ID \
+    --member="serviceAccount:SERVICE_ACCOUNT" \
+    --role="projects/PROJECT_ID/roles/secretCreator"
+```
+
+2. **Grant version management** (add new secret versions):
+
+```bash
+gcloud projects add-iam-policy-binding PROJECT_ID \
+    --member="serviceAccount:SERVICE_ACCOUNT" \
+    --role="roles/secretmanager.secretVersionAdder"
+```
+
+3. **Grant read access** (required to check if secret exists):
+
+```bash
+gcloud projects add-iam-policy-binding PROJECT_ID \
+    --member="serviceAccount:SERVICE_ACCOUNT" \
+    --role="roles/secretmanager.secretAccessor"
+```
+
+Alternatively, for full control (not recommended for production):
 
 ```bash
 gcloud projects add-iam-policy-binding PROJECT_ID \
     --member="serviceAccount:SERVICE_ACCOUNT" \
     --role="roles/secretmanager.admin"
 ```
-
-Or use `roles/secretmanager.secretVersionAdder` to only update existing secrets without create permissions.
 
 ## Environment
 
