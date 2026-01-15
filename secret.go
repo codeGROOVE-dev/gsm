@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -45,6 +46,14 @@ var (
 	secretNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,255}$`)
 )
 
+// isNotOnGCP returns true if the error indicates we're definitely not running on GCP.
+// This includes DNS resolution failures and connection refused errors for the metadata server.
+func isNotOnGCP(err error) bool {
+	var dnsErr *net.DNSError
+	var opErr *net.OpError
+	return errors.As(err, &dnsErr) || errors.As(err, &opErr)
+}
+
 // Fetch retrieves the latest version of a secret from the current project.
 // The project ID is auto-detected from the GCP metadata server.
 func Fetch(ctx context.Context, name string) (string, error) {
@@ -52,7 +61,7 @@ func Fetch(ctx context.Context, name string) (string, error) {
 		return "", errors.New("invalid secret name format")
 	}
 
-	p, err := getProjectID(ctx)
+	p, err := projectID(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -60,8 +69,8 @@ func Fetch(ctx context.Context, name string) (string, error) {
 	return FetchFromProject(ctx, p, name)
 }
 
-// getProjectID fetches the project ID from the GCP metadata server.
-func getProjectID(ctx context.Context) (string, error) {
+// projectID fetches the project ID from the GCP metadata server.
+func projectID(ctx context.Context) (string, error) {
 	var p string
 	var lastErr error
 
@@ -84,6 +93,11 @@ func getProjectID(ctx context.Context) (string, error) {
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			lastErr = err
+			// Don't retry if we're clearly not on GCP (DNS failure, connection refused)
+			if isNotOnGCP(err) {
+				slog.Debug("not running on GCP", "error", err)
+				return "", fmt.Errorf("not running on GCP: %w", err)
+			}
 			slog.Warn("failed to get project ID", "attempt", attempt+1, "error", err)
 			continue
 		}
@@ -117,8 +131,8 @@ func getProjectID(ctx context.Context) (string, error) {
 	return p, nil
 }
 
-// getAccessToken fetches an access token from the GCP metadata server.
-func getAccessToken(ctx context.Context) (string, error) {
+// accessToken fetches an access token from the GCP metadata server.
+func accessToken(ctx context.Context) (string, error) {
 	var t string
 	var lastErr error
 
@@ -141,6 +155,11 @@ func getAccessToken(ctx context.Context) (string, error) {
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			lastErr = err
+			// Don't retry if we're clearly not on GCP (DNS failure, connection refused)
+			if isNotOnGCP(err) {
+				slog.Debug("not running on GCP", "error", err)
+				return "", fmt.Errorf("not running on GCP: %w", err)
+			}
 			slog.Warn("failed to get access token", "attempt", attempt+1, "error", err)
 			continue
 		}
@@ -185,7 +204,7 @@ func FetchFromProject(ctx context.Context, pid, name string) (string, error) {
 		return "", errors.New("invalid secret name format")
 	}
 
-	t, err := getAccessToken(ctx)
+	t, err := accessToken(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -268,7 +287,7 @@ func Store(ctx context.Context, name, value string) error {
 		return errors.New("invalid secret name format")
 	}
 
-	p, err := getProjectID(ctx)
+	p, err := projectID(ctx)
 	if err != nil {
 		return err
 	}
@@ -286,7 +305,7 @@ func StoreInProject(ctx context.Context, pid, name, value string) error {
 		return errors.New("invalid secret name format")
 	}
 
-	tok, err := getAccessToken(ctx)
+	tok, err := accessToken(ctx)
 	if err != nil {
 		return err
 	}
